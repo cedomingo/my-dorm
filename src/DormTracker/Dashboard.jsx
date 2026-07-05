@@ -17,6 +17,7 @@ export function Dashboard({
   setShowMoneyModal, setSelectedDate, setShowLogModal, exams, setShowExamModal, todos,
   settings, sleepLogs, setSleepLogs, sleepSettings, setSleepSettings, readingSubjects,
   setReadingSubjects, readingLogs, setReadingLogs, medicineLogs, setMedicineLogs,
+  medicineSchedules, setMedicineSchedules,
   debtRecords, setDebtRecords, gymData, setGymData, payments, setPayments,
   dashboardConfig, setDashboardConfig,
 }) {
@@ -57,7 +58,7 @@ export function Dashboard({
       case "topcals":   return settings.trackCalories ? <TopCaloriesModule logs={logs} /> : null;
       case "sleep":     return <SleepModule sleepLogs={sleepLogs} setSleepLogs={setSleepLogs} sleepSettings={sleepSettings} setSleepSettings={setSleepSettings} />;
       case "reading":   return <ReadingModule readingSubjects={readingSubjects} setReadingSubjects={setReadingSubjects} readingLogs={readingLogs} setReadingLogs={setReadingLogs} />;
-      case "medicine":  return <MedicineModule medicineLogs={medicineLogs} setMedicineLogs={setMedicineLogs} />;
+      case "medicine":  return <MedicineModule medicineLogs={medicineLogs} setMedicineLogs={setMedicineLogs} medicineSchedules={medicineSchedules} setMedicineSchedules={setMedicineSchedules} />;
       case "debts":     return <DebtsModule debtRecords={debtRecords} setDebtRecords={setDebtRecords} />;
       case "gym":       return <GymModule gymData={gymData} setGymData={setGymData} />;
       case "exam":      return <ExamModule exams={exams} setShowExamModal={setShowExamModal} />;

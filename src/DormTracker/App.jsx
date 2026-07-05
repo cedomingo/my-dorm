@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { Activity, CalendarDays, BookOpen, Wrench, Settings, Calendar } from "lucide-react";
 import "./DormTracker.css";
-
+import { ensurePermission } from "./notifications";
 import { useLocalStorage } from "./hooks";
 import {
   initialDict, initialInventory, initialLogs, todayStr,
@@ -19,6 +19,15 @@ import { SettingsView } from "./SettingsView";
 import {
   AdjustMoneyModal, AddDictionaryModal, DailyLogModal, TodoModal, ExamModalComp,
 } from "./Modals";
+
+// Notification hooks — co-located with their respective modules in
+// modules.jsx, but called here, unconditionally, at the App root. This is
+// what keeps reminders firing even when a user removes a card from their
+// dashboard (dashboardConfig.visible must never gate scheduling).
+import {
+  usePaymentsNotifications, useDebtsNotifications, useDeadlinesNotifications,
+  useExamNotifications, useReadingNotifications, useMedicineNotifications,
+} from "./modules";
 
 
 export default function App() {
@@ -36,6 +45,10 @@ export default function App() {
   const [readingSubjects, setReadingSubjects] = useLocalStorage("dorm_reading_subjects_v1", []);
   const [readingLogs, setReadingLogs] = useLocalStorage("dorm_reading_logs_v1", {});
   const [medicineLogs, setMedicineLogs] = useLocalStorage("dorm_medicine_v1", {});
+  // Scheduled daily medicine reminders — distinct from medicineLogs (which
+  // records ad-hoc "I took this" entries). This is the source of truth for
+  // useMedicineNotifications, and is managed from within MedicineModule.
+  const [medicineSchedules, setMedicineSchedules] = useLocalStorage("dorm_medicine_schedules_v1", []);
   const [debtRecords, setDebtRecords] = useLocalStorage("dorm_debts_v1", []);
   const [gymData, setGymData] = useLocalStorage("dorm_gym_v1", { sessions: [] });
   const [dashboardConfig, setDashboardConfig] = useLocalStorage("dorm_dashboard_config_v1", DEFAULT_DASHBOARD_CONFIG);
@@ -52,6 +65,36 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-accent", settings.accent || "indigo");
   }, [settings.accent]);
+
+// ── First-launch notification prompt ──────────────────────────────────
+// Fires once, ever, regardless of whether any category has something to
+// schedule yet. Later calls to ensurePermission() (inside syncNotifications,
+// triggered by the hooks below) will just hit the cached _permissionGranted
+// value and no-op.
+useEffect(() => {
+  const FIRST_LAUNCH_KEY = "dorm_has_requested_notif_permission_v1";
+  if (!localStorage.getItem(FIRST_LAUNCH_KEY)) {
+    ensurePermission().finally(() => {
+      localStorage.setItem(FIRST_LAUNCH_KEY, "true");
+    });
+  }
+}, []);
+
+
+
+
+
+
+
+  // ── Notification scheduling (always active, regardless of which cards
+  // are visible on the dashboard) ──────────────────────────────────────
+  const notif = settings.notifications || {};
+  usePaymentsNotifications(payments, notif.payments);
+  useDebtsNotifications(debtRecords, notif.debts);
+  useDeadlinesNotifications(todos, notif.deadlines);
+  useExamNotifications(exams, notif.exams);
+  useReadingNotifications(readingSubjects, readingLogs, notif.reading);
+  useMedicineNotifications(medicineSchedules, notif.medicine);
 
   const getDailyTotals = (ds) => {
     const d = logs[ds] || {};
@@ -81,8 +124,8 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-28">
       <header className="accent-header text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Bahay ng Kolek</h1>
-          <p className="text-[10px] accent-header-sub">kalalaking tao nagttrack ng kalidad ng buhay</p>
+          <h1 className="text-xl font-bold tracking-tight">My Dorm</h1>
+          <p className="text-[10px] accent-header-sub">gv gv lang</p>
         </div>
         <button onClick={() => { setSelectedDate(todayStr); setShowLogModal(true); }}
           className="flex items-center gap-1.5 bg-black/10 hover:bg-black/20 px-3 py-1.5 rounded-full text-xs font-bold transition">
@@ -99,6 +142,7 @@ export default function App() {
             sleepLogs={sleepLogs} setSleepLogs={setSleepLogs} sleepSettings={sleepSettings} setSleepSettings={setSleepSettings}
             readingSubjects={readingSubjects} setReadingSubjects={setReadingSubjects} readingLogs={readingLogs} setReadingLogs={setReadingLogs}
             medicineLogs={medicineLogs} setMedicineLogs={setMedicineLogs}
+            medicineSchedules={medicineSchedules} setMedicineSchedules={setMedicineSchedules}
             debtRecords={debtRecords} setDebtRecords={setDebtRecords}
             gymData={gymData} setGymData={setGymData}
             payments={payments} setPayments={setPayments}
@@ -134,3 +178,5 @@ export default function App() {
     </div>
   );
 }
+
+

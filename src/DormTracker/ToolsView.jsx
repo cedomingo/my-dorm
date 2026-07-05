@@ -4,20 +4,12 @@
 import { useState } from "react";
 import {
   GraduationCap, Users, BookMarked, Plus, ChevronLeft,
-  Trash2, FileText, X, Check, Edit,
+  Trash2, FileText, X, Check, Edit, ShieldCheck, Undo2,
 } from "lucide-react";
 
 import { Card, CardHeader, EmptyState } from "./primitives";
 import { useLocalStorage } from "./hooks";
 import { todayStr } from "./data";
-
-
-
-
-
-// ─────────────────────────────────────────────
-// SECTION 8  TOOLS VIEW (Grades + Absents)
-// ─────────────────────────────────────────────
 
 export function ToolsView() {
   const [tab, setTab] = useState("grades");
@@ -42,6 +34,7 @@ export function ToolsView() {
 const calcGrade = (subject) => {
   let total = 0, tw = 0;
   subject.components.forEach(c => {
+    if (c.skipped) return; // exempted component contributes nothing, weight excluded
     if (c.scores.length === 0) return;
     const avg = c.scores.reduce((a, s) => a + s.score, 0) / c.scores.reduce((a, s) => a + s.max, 0);
     total += avg * c.weight; tw += c.weight;
@@ -52,15 +45,23 @@ const calcGrade = (subject) => {
 };
 const calcNeeded = (subject) => {
   const fc = subject.components.find(c => c.name.toLowerCase().includes("final"));
-  if (!fc || fc.scores.length > 0) return null;
+  if (!fc || fc.skipped || fc.scores.length > 0) return null;
   let earned = 0, ew = 0;
   subject.components.forEach(c => {
-    if (c.name.toLowerCase().includes("final") || c.scores.length === 0) return;
+    if (c.name.toLowerCase().includes("final") || c.skipped || c.scores.length === 0) return;
     const avg = c.scores.reduce((a, s) => a + s.score, 0) / c.scores.reduce((a, s) => a + s.max, 0);
     earned += avg * c.weight; ew += c.weight;
   });
   const needed = ((subject.passingGrade - earned) / fc.weight) * 100;
   return Math.max(0, Math.min(100, Math.round(needed * 10) / 10));
+};
+
+// Checks whether the student is currently eligible to skip a given (finals) component:
+// no scores logged yet for it, and the grade from everything else already passes.
+const canSkip = (subject, comp) => {
+  if (comp.skipped || comp.scores.length > 0) return false;
+  const grade = calcGrade(subject); // already excludes comp since it has no scores
+  return grade !== null && grade.passing;
 };
 
 export function GradesTracker() {
@@ -125,16 +126,16 @@ export function AddSubjectForm({ onAdd, onCancel }) {
   const [name, setName] = useState("");
   const [passing, setPassing] = useState("60");
   const [comps, setComps] = useState([
-    { id: "c1", name: "Quizzes", weight: 25, scores: [] },
-    { id: "c2", name: "Groupwork", weight: 25, scores: [] },
-    { id: "c3", name: "Attendance", weight: 25, scores: [] },
-    { id: "c4", name: "Finals", weight: 25, scores: [] },
+    { id: "c1", name: "Quizzes", weight: 25, scores: [], skipped: false },
+    { id: "c2", name: "Groupwork", weight: 25, scores: [], skipped: false },
+    { id: "c3", name: "Attendance", weight: 25, scores: [], skipped: false },
+    { id: "c4", name: "Finals", weight: 25, scores: [], skipped: false },
   ]);
   const [cn, setCn] = useState(""), [cw, setCw] = useState("");
   const total = comps.reduce((a, c) => a + c.weight, 0);
   const addComp = () => {
     if (!cn.trim() || !cw) return;
-    setComps(p => [...p, { id: "c" + Date.now(), name: cn.trim(), weight: parseFloat(cw), scores: [] }]);
+    setComps(p => [...p, { id: "c" + Date.now(), name: cn.trim(), weight: parseFloat(cw), scores: [], skipped: false }]);
     setCn(""); setCw("");
   };
   const submit = (e) => {
@@ -188,10 +189,65 @@ export function AddSubjectForm({ onAdd, onCancel }) {
   );
 }
 
+// New: inline editor for an existing subject's components (rename / reweight / delete / add)
+function EditComponentsPanel({ subject, onSave, onCancel }) {
+  const [comps, setComps] = useState(subject.components.map(c => ({ ...c })));
+  const [cn, setCn] = useState(""), [cw, setCw] = useState("");
+  const total = comps.reduce((a, c) => a + c.weight, 0);
+
+  const addComp = () => {
+    if (!cn.trim() || !cw) return;
+    setComps(p => [...p, { id: "c" + Date.now(), name: cn.trim(), weight: parseFloat(cw), scores: [], skipped: false }]);
+    setCn(""); setCw("");
+  };
+  const removeComp = (id) => setComps(p => p.filter(c => c.id !== id));
+  const rename = (id, name) => setComps(p => p.map(c => c.id === id ? { ...c, name } : c));
+  const reweight = (id, weight) => setComps(p => p.map(c => c.id === id ? { ...c, weight: parseFloat(weight) || 0 } : c));
+
+  return (
+    <Card>
+      <CardHeader icon={<Edit size={18} className="text-slate-500" />} title="Edit Components" />
+      <div className="p-5 space-y-3">
+        <div className="flex justify-between items-center">
+          <label className="text-xs font-bold text-slate-500">Components</label>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${total === 100 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{total}% / 100%</span>
+        </div>
+        <div className="space-y-2">
+          {comps.map(c => (
+            <div key={c.id} className="flex gap-2 items-center">
+              <input type="text" value={c.name} onChange={e => rename(c.id, e.target.value)}
+                className="flex-1 border border-slate-200 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-slate-200" />
+              <input type="number" min="0" max="100" value={c.weight} onChange={e => reweight(c.id, e.target.value)}
+                className="w-16 border border-slate-200 rounded-lg p-2 text-sm text-center outline-none focus:ring-2 focus:ring-slate-200" />
+              <span className="text-xs text-slate-400">%</span>
+              <button type="button" onClick={() => removeComp(c.id)} className="text-slate-300 hover:text-rose-500 transition" title="Delete component (removes its scores too)">
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+          <div className="flex gap-2 items-center pt-1 border-t border-slate-100">
+            <input type="text" placeholder="Component name" value={cn} onChange={e => setCn(e.target.value)}
+              className="flex-1 border border-dashed border-slate-200 rounded-lg p-2 text-sm outline-none bg-slate-50" />
+            <input type="number" placeholder="%" value={cw} onChange={e => setCw(e.target.value)}
+              className="w-16 border border-dashed border-slate-200 rounded-lg p-2 text-sm text-center outline-none bg-slate-50" />
+            <button type="button" onClick={addComp} className="accent-soft-btn rounded-lg p-2 transition"><Plus size={16} /></button>
+          </div>
+        </div>
+        {total !== 100 && <p className="text-xs text-amber-600 font-bold bg-amber-50 px-3 py-2 rounded-xl border border-amber-100">⚠ Weights must total exactly 100%</p>}
+        <div className="flex gap-3 pt-2">
+          <button type="button" onClick={onCancel} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-50 transition">Cancel</button>
+          <button type="button" disabled={total !== 100} onClick={() => onSave(comps)} className="flex-1 py-2.5 accent-btn rounded-xl text-sm font-bold disabled:opacity-40 transition">Save Changes</button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export function SubjectDetail({ subject, onUpdate, onBack, onDelete }) {
   const [activeComp, setActiveComp] = useState(null);
   const [si, setSi] = useState(""), [mi, setMi] = useState(""), [sl, setSl] = useState("");
   const [showNotes, setShowNotes] = useState(false);
+  const [showEditComps, setShowEditComps] = useState(false);
   const [notes, setNotes] = useState(subject.notes || "");
   const grade = calcGrade(subject);
   const needed = calcNeeded(subject);
@@ -204,6 +260,8 @@ export function SubjectDetail({ subject, onUpdate, onBack, onDelete }) {
   };
   const delScore = (compId, scId) => onUpdate({ ...subject, components: subject.components.map(c => c.id === compId ? { ...c, scores: c.scores.filter(s => s.id !== scId) } : c) });
   const saveNotes = () => { onUpdate({ ...subject, notes }); setShowNotes(false); };
+  const saveComps = (newComps) => { onUpdate({ ...subject, components: newComps }); setShowEditComps(false); };
+  const toggleSkip = (compId, skip) => onUpdate({ ...subject, components: subject.components.map(c => c.id === compId ? { ...c, skipped: skip } : c) });
 
   return (
     <div className="space-y-4">
@@ -213,9 +271,14 @@ export function SubjectDetail({ subject, onUpdate, onBack, onDelete }) {
           <h2 className="font-extrabold text-slate-800 text-lg">{subject.name}</h2>
           <p className="text-xs text-slate-400">Passing: {subject.passingGrade}%</p>
         </div>
+        <button onClick={() => setShowEditComps(true)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition" title="Edit components"><Edit size={18} /></button>
         <button onClick={() => setShowNotes(true)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition" title="Notes"><FileText size={18} /></button>
         <button onClick={() => onDelete(subject.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition"><Trash2 size={18} /></button>
       </div>
+
+      {showEditComps && (
+        <EditComponentsPanel subject={subject} onSave={saveComps} onCancel={() => setShowEditComps(false)} />
+      )}
 
       {showNotes && (
         <Card>
@@ -256,6 +319,7 @@ export function SubjectDetail({ subject, onUpdate, onBack, onDelete }) {
         const tMax = comp.scores.reduce((a, s) => a + s.max, 0);
         const pct = tMax > 0 ? Math.round((tScore / tMax) * 100 * 10) / 10 : null;
         const isFinals = comp.name.toLowerCase().includes("final");
+        const skippable = isFinals && canSkip(subject, comp);
         return (
           <Card key={comp.id}>
             <div className="p-4">
@@ -264,13 +328,22 @@ export function SubjectDetail({ subject, onUpdate, onBack, onDelete }) {
                   <p className="font-bold text-slate-800">{comp.name}</p>
                   <p className="text-xs text-slate-400">{comp.weight}% of grade</p>
                 </div>
-                {pct !== null
-                  ? <span className={`text-lg font-extrabold ${pct >= subject.passingGrade ? "text-emerald-600" : "text-rose-500"}`}>{pct}%</span>
-                  : isFinals && needed !== null
-                    ? <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-lg">Need {needed}%</span>
-                    : <span className="text-slate-300 text-xs">No scores</span>
+                {comp.skipped
+                  ? <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg flex items-center gap-1"><ShieldCheck size={13} /> Exempted</span>
+                  : pct !== null
+                    ? <span className={`text-lg font-extrabold ${pct >= subject.passingGrade ? "text-emerald-600" : "text-rose-500"}`}>{pct}%</span>
+                    : isFinals && needed !== null
+                      ? <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-lg">Need {needed}%</span>
+                      : <span className="text-slate-300 text-xs">No scores</span>
                 }
               </div>
+
+              {isFinals && comp.skipped && (
+                <button onClick={() => toggleSkip(comp.id, false)} className="w-full mb-3 py-2 text-xs font-bold text-slate-500 bg-slate-50 rounded-xl hover:bg-slate-100 transition flex items-center justify-center gap-1">
+                  <Undo2 size={13} /> Undo exemption
+                </button>
+              )}
+
               {hasScores && (
                 <div className="space-y-1.5 mb-3">
                   {comp.scores.map(sc => (
@@ -285,7 +358,8 @@ export function SubjectDetail({ subject, onUpdate, onBack, onDelete }) {
                   ))}
                 </div>
               )}
-              {activeComp === comp.id ? (
+
+              {!comp.skipped && (activeComp === comp.id ? (
                 <div className="accent-bg-soft border accent-border rounded-xl p-3 space-y-2 animate-in slide-in-from-top-1 duration-100">
                   <input type="text" placeholder="Label (optional, e.g. Quiz 1)" value={sl} onChange={e => setSl(e.target.value)}
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none bg-white focus:ring-2 focus:ring-slate-300" />
@@ -307,10 +381,17 @@ export function SubjectDetail({ subject, onUpdate, onBack, onDelete }) {
                   </div>
                 </div>
               ) : (
-                <button onClick={() => setActiveComp(comp.id)} className="w-full py-2 text-xs font-bold accent-text accent-bg-soft rounded-xl hover:accent-bg-100 transition flex items-center justify-center gap-1">
-                  <Plus size={13} /> Add Score
-                </button>
-              )}
+                <div className="space-y-2">
+                  <button onClick={() => setActiveComp(comp.id)} className="w-full py-2 text-xs font-bold accent-text accent-bg-soft rounded-xl hover:accent-bg-100 transition flex items-center justify-center gap-1">
+                    <Plus size={13} /> Add Score
+                  </button>
+                  {skippable && (
+                    <button onClick={() => toggleSkip(comp.id, true)} className="w-full py-2 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition flex items-center justify-center gap-1">
+                      <ShieldCheck size={13} /> Skip Finals — already passing
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           </Card>
         );

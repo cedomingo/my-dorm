@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Utensils, Settings, Check, Wallet, Bell, Repeat, DollarSign, ListTodo, GraduationCap, BookOpen, Pill, ChevronDown } from "lucide-react";
+import { Utensils, Settings, Check, Wallet, Bell, Repeat, DollarSign, ListTodo, GraduationCap, BookOpen, Pill, ChevronDown, Heart } from "lucide-react";
 import { Card, CardHeader, Toggle } from "./primitives";
 import { ACCENTS, DOW_LABELS } from "./data";
 
@@ -224,6 +224,12 @@ export function SettingsView({ settings, setSettings }) {
           </div>
         </div>
       </Card>
+
+      <div className="text-center py-2">
+        <p className="text-[11px] text-slate-300">
+          made by ceej domingo · pasend gcash 0997 529 6479
+        </p>
+      </div>
     </div>
   );
 }

@@ -10,13 +10,17 @@ import {
   Check, Trash2, Edit, GraduationCap, ListTodo, AlarmClock,
   Moon, Pill, Dumbbell, DollarSign,
   ArrowDownLeft, ArrowUpRight, Pencil, Coffee, BarChart2,
-  Repeat, CalendarClock,
+  Repeat, CalendarClock, BellRing,
 } from "lucide-react";
 
 import { Card, CardHeader, SoftAccentBtn, EmptyState } from "./primitives";
 import { useLocalStorage } from "./hooks";
 import { getTodayStr, todayStr, getOffsetDateStr, calcSleepDuration, fmtDur, fmtDateShort, DOW_LABELS, fmtTime12, getMissedDates,
 } from "./data";
+import {
+  useCurrentDate, syncNotifications, clearAllScheduled, REMINDER_HOUR, REMINDER_MINUTE,
+  scheduleLocal, hashId,
+} from "./notifications";
 
 
 // ─────────────────────────────────────────────
@@ -244,24 +248,9 @@ export function SleepModule({ sleepLogs, setSleepLogs, sleepSettings, setSleepSe
   const [editTarget, setEditTarget] = useState(false);
   const [targetInput, setTargetInput] = useState(sleepSettings.targetHrs.toString());
 
-  // Live-updating "today" — refreshes on an interval and whenever the tab
-  // regains focus/visibility, so a long-open tab still rolls the 7-day
-  // window and sleep debt calc over at midnight.
-  const [currentDate, setCurrentDate] = useState(getTodayStr());
-  useEffect(() => {
-    const check = () => {
-      const fresh = getTodayStr();
-      setCurrentDate(prev => (prev !== fresh ? fresh : prev));
-    };
-    const interval = setInterval(check, 60 * 1000); // check every minute
-    document.addEventListener("visibilitychange", check);
-    window.addEventListener("focus", check);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", check);
-      window.removeEventListener("focus", check);
-    };
-  }, []);
+  // Live-updating "today" — shared hook (was a locally duplicated
+  // interval + visibilitychange/focus pattern; see notifications.js).
+  const currentDate = useCurrentDate();
 
   const getOffsetFrom = (base, offset) => {
     const d = new Date(base + "T00:00:00");
@@ -438,8 +427,9 @@ export function SleepModule({ sleepLogs, setSleepLogs, sleepSettings, setSleepSe
   );
 }
 
+// ─────────────────────────────────────────────
 // 4f2. Reading Notification Tracker
-// 4f2. Reading Notification Tracker
+// ─────────────────────────────────────────────
 
 export function ReadingModule({ readingSubjects, setReadingSubjects, readingLogs, setReadingLogs }) {
   const [showAdd, setShowAdd] = useState(false);
@@ -612,14 +602,76 @@ export function ReadingModule({ readingSubjects, setReadingSubjects, readingLogs
   );
 }
 
+// Reading notifications: a repeating weekly schedule per (subject, day),
+// plus a one-off nudge the moment a subject's missed-session count grows.
+// Lives here (co-located with ReadingModule) but is called from the App
+// root so it keeps firing even when the Reading card isn't on the dashboard.
+export function useReadingNotifications(readingSubjects, readingLogs, cat) {
+  const currentDate = useCurrentDate();
+  const [scheduledMap, setScheduledMap] = useLocalStorage("dorm_notif_sched_reading_v1", {});
+  const [missedCounts, setMissedCounts] = useLocalStorage("dorm_notif_reading_missed_v1", {});
+
+  useEffect(() => {
+    if (!cat || !cat.enabled) {
+      clearAllScheduled(scheduledMap, setScheduledMap);
+      return;
+    }
+
+    const desired = [];
+    (readingSubjects || []).forEach(sub => {
+      const [h, m] = (sub.time || "19:00").split(":").map(Number);
+      (sub.days || []).forEach(weekday => {
+        desired.push({
+          key: `reading:${sub.id}:day${weekday}`,
+          title: "Reading time",
+          body: `${sub.subject}${sub.pages ? ` · ${sub.pages} pages` : ""}`,
+          repeating: { weekday, hour: h, minute: m },
+        });
+      });
+    });
+    syncNotifications(desired, scheduledMap, setScheduledMap);
+
+    // One-off nudge whenever a subject's missed-day count grows since the
+    // last check (e.g. a scheduled day passed with nothing marked done).
+    const nextMissed = { ...missedCounts };
+    let missedChanged = false;
+    (readingSubjects || []).forEach(sub => {
+      const doneMap = (readingLogs || {})[sub.id] || {};
+      const missed = getMissedDates(sub, doneMap).length;
+      const prev = missedCounts[sub.id] || 0;
+      if (missed > prev) {
+        const fireSoon = new Date(Date.now() + 5000);
+        // Distinct, date-stamped key so this fires at most once per check.
+        scheduleLocalNudge(`reading-missed:${sub.id}:${currentDate}`, "Missed reading",
+          `${sub.subject} has ${missed} missed session${missed > 1 ? "s" : ""}.`, fireSoon);
+      }
+      if (missed !== prev) { nextMissed[sub.id] = missed; missedChanged = true; }
+    });
+    if (missedChanged) setMissedCounts(nextMissed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDate, cat?.enabled, JSON.stringify(readingSubjects), JSON.stringify(readingLogs)]);
+}
+
+// Small local helper — kept next to its only user (useReadingNotifications).
+function scheduleLocalNudge(key, title, body, at) {
+  return scheduleLocal(hashId(key), title, body, at);
+}
+
 // 4g. Medicine Tracker
-export function MedicineModule({ medicineLogs, setMedicineLogs }) {
+export function MedicineModule({ medicineLogs, setMedicineLogs, medicineSchedules, setMedicineSchedules }) {
   const [showAdd, setShowAdd] = useState(false);
   const [medName, setMedName] = useState("");
   const [medDose, setMedDose] = useState("");
   const [medTime, setMedTime] = useState(new Date().toTimeString().slice(0, 5));
   const [logDate, setLogDate] = useState(todayStr);
   const [savedMeds, setSavedMeds] = useLocalStorage("dorm_saved_meds_v1", []);
+
+  // Scheduled daily reminders — separate from the ad-hoc "log an intake"
+  // entries above. This is what useMedicineNotifications reads from.
+  const [showAddSchedule, setShowAddSchedule] = useState(false);
+  const [schedName, setSchedName] = useState("");
+  const [schedDose, setSchedDose] = useState("");
+  const [schedTime, setSchedTime] = useState("08:00");
 
   const handleAdd = (e) => {
     e.preventDefault();
@@ -635,13 +687,23 @@ export function MedicineModule({ medicineLogs, setMedicineLogs }) {
   });
   const todayEntries = medicineLogs[todayStr] || [];
 
+  const addSchedule = (e) => {
+    e.preventDefault();
+    if (!schedName.trim()) return;
+    setMedicineSchedules(prev => [...(prev || []), {
+      id: "medsch" + Date.now(), name: schedName.trim(), dose: schedDose.trim(), time: schedTime,
+    }]);
+    setSchedName(""); setSchedDose(""); setSchedTime("08:00"); setShowAddSchedule(false);
+  };
+  const delSchedule = (id) => setMedicineSchedules(prev => (prev || []).filter(s => s.id !== id));
+
   return (
     <Card>
       <CardHeader icon={<Pill size={20} className="text-emerald-500" />} title="Medicine Tracker"
         action={<SoftAccentBtn onClick={() => setShowAdd(!showAdd)}><Plus size={14} /> Log</SoftAccentBtn>} />
-      <div className="p-5">
+      <div className="p-5 space-y-5">
         {showAdd && (
-          <form onSubmit={handleAdd} className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-4 space-y-3 mb-4">
+          <form onSubmit={handleAdd} className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-4 space-y-3">
             <input type="text" required placeholder="Medicine name" value={medName} onChange={e => setMedName(e.target.value)}
               className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none bg-white focus:ring-2 focus:ring-emerald-300" list="saved-meds" />
             <datalist id="saved-meds">{savedMeds.map(m => <option key={m} value={m} />)}</datalist>
@@ -671,9 +733,65 @@ export function MedicineModule({ medicineLogs, setMedicineLogs }) {
               ))}
             </div>
         }
+
+        <div className="pt-4 border-t border-slate-100">
+          <div className="flex justify-between items-center mb-2">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <BellRing size={13} /> Daily Reminders
+            </p>
+            <SoftAccentBtn onClick={() => setShowAddSchedule(!showAddSchedule)}><Plus size={13} /> Reminder</SoftAccentBtn>
+          </div>
+          {showAddSchedule && (
+            <form onSubmit={addSchedule} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 mb-3">
+              <input type="text" required placeholder="Medicine name" value={schedName} onChange={e => setSchedName(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none bg-white focus:ring-2 focus:ring-emerald-300" />
+              <div className="grid grid-cols-2 gap-2">
+                <input type="text" placeholder="Dose (optional)" value={schedDose} onChange={e => setSchedDose(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none bg-white focus:ring-2 focus:ring-emerald-300" />
+                <input type="time" value={schedTime} onChange={e => setSchedTime(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none bg-white focus:ring-2 focus:ring-emerald-300" />
+              </div>
+              <button type="submit" className="w-full bg-emerald-500 text-white font-bold py-2.5 rounded-lg hover:bg-emerald-600 transition text-sm">Save Reminder</button>
+            </form>
+          )}
+          {(medicineSchedules || []).length === 0
+            ? <p className="text-center text-slate-300 text-xs py-2 italic">No daily reminders set.</p>
+            : <div className="space-y-1.5">
+                {(medicineSchedules || []).map(s => (
+                  <div key={s.id} className="flex justify-between items-center px-3 py-2 bg-slate-50 rounded-lg border border-slate-100">
+                    <span className="text-xs font-semibold text-slate-600">{s.name}{s.dose ? ` · ${s.dose}` : ""} · {fmtTime12(s.time)}</span>
+                    <button onClick={() => delSchedule(s.id)} className="text-slate-300 hover:text-rose-500 transition"><Trash2 size={13} /></button>
+                  </div>
+                ))}
+              </div>
+          }
+        </div>
       </div>
     </Card>
   );
+}
+
+// Medicine notifications: one repeating daily schedule per scheduled entry.
+export function useMedicineNotifications(medicineSchedules, cat) {
+  const [scheduledMap, setScheduledMap] = useLocalStorage("dorm_notif_sched_medicine_v1", {});
+
+  useEffect(() => {
+    if (!cat || !cat.enabled) {
+      clearAllScheduled(scheduledMap, setScheduledMap);
+      return;
+    }
+    const desired = (medicineSchedules || []).map(med => {
+      const [h, m] = (med.time || "08:00").split(":").map(Number);
+      return {
+        key: `medicine:${med.id}`,
+        title: "Medicine reminder",
+        body: `${med.name}${med.dose ? ` · ${med.dose}` : ""}`,
+        repeating: { hour: h, minute: m },
+      };
+    });
+    syncNotifications(desired, scheduledMap, setScheduledMap);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cat?.enabled, JSON.stringify(medicineSchedules)]);
 }
 
 // 4h. Debts / Owe Records
@@ -780,14 +898,37 @@ export function DebtsModule({ debtRecords, setDebtRecords }) {
   );
 }
 
+// Debts notifications: one notification per enabled leadDay, only for
+// unsettled records that have a due date.
+export function useDebtsNotifications(debtRecords, cat) {
+  const currentDate = useCurrentDate();
+  const [scheduledMap, setScheduledMap] = useLocalStorage("dorm_notif_sched_debts_v1", {});
 
-
-
-
-
-
-
-
+  useEffect(() => {
+    if (!cat || !cat.enabled) {
+      clearAllScheduled(scheduledMap, setScheduledMap);
+      return;
+    }
+    const leadDays = cat.leadDays || [];
+    const desired = [];
+    (debtRecords || []).filter(r => !r.settled && r.dueDate).forEach(r => {
+      const due = new Date(r.dueDate + "T00:00:00");
+      leadDays.forEach(lead => {
+        const fireDate = new Date(due);
+        fireDate.setDate(fireDate.getDate() - lead);
+        fireDate.setHours(REMINDER_HOUR, REMINDER_MINUTE, 0, 0);
+        desired.push({
+          key: `debt:${r.id}:lead${lead}`,
+          title: r.type === "owe" ? "Debt due soon" : "You're owed a payment",
+          body: `${r.name} · ₱${r.amount.toLocaleString()} · due ${fmtDateShort(r.dueDate)}`,
+          at: fireDate,
+        });
+      });
+    });
+    syncNotifications(desired, scheduledMap, setScheduledMap);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDate, cat?.enabled, JSON.stringify(cat?.leadDays), JSON.stringify(debtRecords)]);
+}
 
 // 4i. Gym Tracker
 export function GymModule({ gymData, setGymData }) {
@@ -1001,6 +1142,37 @@ export function ExamModule({ exams, setShowExamModal }) {
   );
 }
 
+// Exam notifications: one notification per enabled leadDay per upcoming exam.
+export function useExamNotifications(exams, cat) {
+  const currentDate = useCurrentDate();
+  const [scheduledMap, setScheduledMap] = useLocalStorage("dorm_notif_sched_exams_v1", {});
+
+  useEffect(() => {
+    if (!cat || !cat.enabled) {
+      clearAllScheduled(scheduledMap, setScheduledMap);
+      return;
+    }
+    const leadDays = cat.leadDays || [];
+    const desired = [];
+    (exams || []).forEach(exam => {
+      const due = new Date(exam.date + "T00:00:00");
+      leadDays.forEach(lead => {
+        const fireDate = new Date(due);
+        fireDate.setDate(fireDate.getDate() - lead);
+        fireDate.setHours(REMINDER_HOUR, REMINDER_MINUTE, 0, 0);
+        desired.push({
+          key: `exam:${exam.id}:lead${lead}`,
+          title: "Exam coming up",
+          body: `${exam.subject}${exam.label ? ` — ${exam.label}` : ""} · ${fmtDateShort(exam.date)}`,
+          at: fireDate,
+        });
+      });
+    });
+    syncNotifications(desired, scheduledMap, setScheduledMap);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDate, cat?.enabled, JSON.stringify(cat?.leadDays), JSON.stringify(exams)]);
+}
+
 // 4k. Closest Deadlines
 export function DeadlinesModule({ todos, exams }) {
   const now = new Date(); now.setHours(0, 0, 0, 0);
@@ -1046,6 +1218,41 @@ export function DeadlinesModule({ todos, exams }) {
       </div>
     </Card>
   );
+}
+
+// Deadlines (todos) notifications: one notification per enabled leadDay,
+// only for todos that aren't done yet. Exams have their own category
+// (useExamNotifications above) even though both appear in this card's UI.
+export function useDeadlinesNotifications(todos, cat) {
+  const currentDate = useCurrentDate();
+  const [scheduledMap, setScheduledMap] = useLocalStorage("dorm_notif_sched_deadlines_v1", {});
+
+  useEffect(() => {
+    if (!cat || !cat.enabled) {
+      clearAllScheduled(scheduledMap, setScheduledMap);
+      return;
+    }
+    const leadDays = cat.leadDays || [];
+    const desired = [];
+    Object.entries(todos || {}).forEach(([date, items]) => {
+      (items || []).filter(t => !t.done).forEach(t => {
+        const due = new Date(date + "T00:00:00");
+        leadDays.forEach(lead => {
+          const fireDate = new Date(due);
+          fireDate.setDate(fireDate.getDate() - lead);
+          fireDate.setHours(REMINDER_HOUR, REMINDER_MINUTE, 0, 0);
+          desired.push({
+            key: `todo:${t.id}:lead${lead}`,
+            title: "To-do due soon",
+            body: `${t.text} · due ${fmtDateShort(date)}`,
+            at: fireDate,
+          });
+        });
+      });
+    });
+    syncNotifications(desired, scheduledMap, setScheduledMap);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDate, cat?.enabled, JSON.stringify(cat?.leadDays), JSON.stringify(todos)]);
 }
 
 // ─────────────────────────────────────────────
@@ -1106,23 +1313,9 @@ export function PaymentsModule({ payments, setPayments, money, setMoney, logs, s
   const [weekdays, setWeekdays] = useState([0]);
   const [affectsWallet, setAffectsWallet] = useState(true);
 
-  // Live-updating "today" — refreshes on an interval and whenever the tab
-  // regains focus/visibility, so a long-open tab still rolls over at midnight.
-  const [currentDate, setCurrentDate] = useState(getTodayStr());
-  useEffect(() => {
-    const check = () => {
-      const fresh = getTodayStr();
-      setCurrentDate(prev => (prev !== fresh ? fresh : prev));
-    };
-    const interval = setInterval(check, 60 * 1000); // check every minute
-    document.addEventListener("visibilitychange", check);
-    window.addEventListener("focus", check);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", check);
-      window.removeEventListener("focus", check);
-    };
-  }, []);
+  // Live-updating "today" — shared hook (was a locally duplicated
+  // interval + visibilitychange/focus pattern; see notifications.js).
+  const currentDate = useCurrentDate();
 
   // Keep every payment's history stacked up to today — any due date that has
   // passed without a confirmation gets logged as a pending/missed entry.
@@ -1349,4 +1542,40 @@ export function PaymentsModule({ payments, setPayments, money, setMoney, logs, s
       </div>
     </Card>
   );
+}
+
+// Payments notifications: one notification per enabled leadDay, per
+// unconfirmed pending/backlog entry — reuses the same dueDatesUpTo /
+// history shape PaymentsModule already maintains.
+export function usePaymentsNotifications(payments, cat) {
+  const currentDate = useCurrentDate();
+  const [scheduledMap, setScheduledMap] = useLocalStorage("dorm_notif_sched_payments_v1", {});
+
+  useEffect(() => {
+    if (!cat || !cat.enabled) {
+      clearAllScheduled(scheduledMap, setScheduledMap);
+      return;
+    }
+    const leadDays = cat.leadDays || [];
+    const desired = [];
+    (payments || []).forEach(p => {
+      const pending = (p.history || []).filter(h => !h.confirmed);
+      pending.forEach(h => {
+        const due = new Date(h.period + "T00:00:00");
+        leadDays.forEach(lead => {
+          const fireDate = new Date(due);
+          fireDate.setDate(fireDate.getDate() - lead);
+          fireDate.setHours(REMINDER_HOUR, REMINDER_MINUTE, 0, 0);
+          desired.push({
+            key: `payment:${p.id}:${h.period}:lead${lead}`,
+            title: "Payment due soon",
+            body: `${p.name}${p.amount ? ` · ₱${p.amount.toLocaleString()}` : ""} · due ${fmtDateShort(h.period)}`,
+            at: fireDate,
+          });
+        });
+      });
+    });
+    syncNotifications(desired, scheduledMap, setScheduledMap);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDate, cat?.enabled, JSON.stringify(cat?.leadDays), JSON.stringify(payments)]);
 }
