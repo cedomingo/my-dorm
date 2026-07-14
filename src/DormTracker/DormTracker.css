@@ -75,3 +75,46 @@
 .accent-soft-btn { background-color: var(--accent-50); color: var(--accent-700); }
 .accent-soft-btn:hover { background-color: var(--accent-100); }
 .accent-progress { background-color: var(--accent-600); }
+
+/* ============================================================
+   Animation primitives
+   ============================================================ */
+
+@keyframes fadeIn      { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeInUp    { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes scaleIn     { from { opacity: 0; transform: scale(.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes popIn       { 0% { opacity: 0; transform: scale(.8); } 60% { transform: scale(1.06); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes slideUp     { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes slideDown   { from { transform: translateY(0); } to { transform: translateY(100%); } }
+@keyframes pulseSoft   { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+
+/* Generic reveal utilities */
+.anim-fade-in   { animation: fadeIn .25s ease both; }
+.anim-fade-up   { animation: fadeInUp .35s cubic-bezier(.16,1,.3,1) both; }
+.anim-scale-in  { animation: scaleIn .2s ease both; }
+.anim-pop       { animation: popIn .35s cubic-bezier(.34,1.56,.64,1) both; }
+.anim-pulse     { animation: pulseSoft 1.6s ease-in-out infinite; }
+
+/* Tab switching */
+.tab-content-enter { animation: fadeInUp .25s cubic-bezier(.16,1,.3,1) both; }
+
+/* Dashboard module stagger (delay set inline per index) */
+.stagger-item { animation: fadeInUp .4s cubic-bezier(.16,1,.3,1) both; }
+
+/* Modal: mobile = bottom sheet, desktop = centered scale-in */
+.modal-backdrop-enter { animation: fadeIn .2s ease both; }
+.modal-backdrop-exit  { animation: fadeIn .18s ease reverse both; }
+.modal-sheet-enter    { animation: slideUp .28s cubic-bezier(.16,1,.3,1) both; }
+.modal-sheet-exit     { animation: slideDown .2s cubic-bezier(.4,0,1,1) both; }
+
+@media (min-width: 640px) {
+  .modal-sheet-enter { animation: scaleIn .22s cubic-bezier(.16,1,.3,1) both; }
+  .modal-sheet-exit  { animation: scaleIn .16s ease reverse both; }
+}
+
+/* Global micro-interaction: buttons get a light "press" feel everywhere */
+button:not(:disabled), [role="button"] {
+  transition-property: transform, background-color, color, box-shadow, border-color;
+  transition-duration: 150ms;
+}
+button:active:not(:disabled), [role="button"]:active { transform: scale(.96); }

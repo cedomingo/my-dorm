@@ -77,7 +77,7 @@ export function Dashboard({
         </button>
         {editMode && (
           <button onClick={() => setShowAddModules(!showAddModules)}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold accent-btn transition">
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold accent-btn transition anim-pop">
             <Plus size={16} /> Add Modules
           </button>
         )}
@@ -109,25 +109,30 @@ export function Dashboard({
           </div>
         </Card>
       )}
-      {active.map(id => (
-        <div key={id} draggable={editMode}
-          onDragStart={() => setDragging(id)}
-          onDragOver={e => { e.preventDefault(); setDragOver(id); }}
-          onDrop={e => handleDrop(e, id)}
-          className={`relative transition-all ${dragOver === id ? "ring-2 ring-offset-1 rounded-2xl" : ""}`}
-          style={dragOver === id ? { "--tw-ring-color": "var(--accent-400)" } : {}}>
-          {editMode && (
-            <div className="absolute -left-1 top-1/2 -translate-y-1/2 z-10 bg-white border border-slate-200 rounded-lg p-1 cursor-grab shadow-sm">
-              <GripVertical size={16} className="text-slate-300" />
-            </div>
-          )}
-          <div className={editMode ? "ml-5" : ""}>{renderModule(id)}</div>
-          {editMode && (
-            <button onClick={() => toggleModule(id)}
-              className="absolute -right-1 -top-1 z-10 bg-rose-500 text-white rounded-full p-0.5 shadow-sm hover:bg-rose-600 transition"><X size={14} /></button>
-          )}
-        </div>
-      ))}
+      {active.map((id, i) => {
+        // Stagger each module's entrance slightly, capped so a long
+        // dashboard doesn't take forever to finish revealing itself.
+        const delay = `${Math.min(i * 60, 300)}ms`;
+        return (
+          <div key={id} draggable={editMode}
+            onDragStart={() => setDragging(id)}
+            onDragOver={e => { e.preventDefault(); setDragOver(id); }}
+            onDrop={e => handleDrop(e, id)}
+            className={`stagger-item relative transition-all ${dragOver === id ? "ring-2 ring-offset-1 rounded-2xl" : ""}`}
+            style={dragOver === id ? { "--tw-ring-color": "var(--accent-400)", animationDelay: delay } : { animationDelay: delay }}>
+            {editMode && (
+              <div className="absolute -left-1 top-1/2 -translate-y-1/2 z-10 bg-white border border-slate-200 rounded-lg p-1 cursor-grab shadow-sm">
+                <GripVertical size={16} className="text-slate-300" />
+              </div>
+            )}
+            <div className={editMode ? "ml-5" : ""}>{renderModule(id)}</div>
+            {editMode && (
+              <button onClick={() => toggleModule(id)}
+                className="absolute -right-1 -top-1 z-10 bg-rose-500 text-white rounded-full p-0.5 shadow-sm hover:bg-rose-600 transition anim-pop"><X size={14} /></button>
+            )}
+          </div>
+        );
+      })}
       {active.length === 0 && (
         <Card>
           <EmptyState icon={<LayoutDashboard size={32} />} title="No modules on your dashboard" subtitle={'Tap "Edit Dashboard" → "Add Modules" to get started'} />

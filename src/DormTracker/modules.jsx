@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 
 
 import {
-  ChevronDown, Wallet, Package, Utensils, Plus, Minus, BookOpen,
+  ChevronDown, Package, Utensils, Plus, Minus, BookOpen,
   ChevronLeft, ChevronRight, X, TrendingDown,
   Check, Trash2, Edit, GraduationCap, ListTodo, AlarmClock,
   Moon, Pill, Dumbbell, DollarSign,
@@ -13,9 +13,9 @@ import {
   Repeat, CalendarClock, BellRing,
 } from "lucide-react";
 
-import { Card, CardHeader, SoftAccentBtn, EmptyState } from "./primitives";
+import { Card, CardHeader, SoftAccentBtn } from "./primitives";
 import { useLocalStorage } from "./hooks";
-import { getTodayStr, todayStr, getOffsetDateStr, calcSleepDuration, fmtDur, fmtDateShort, DOW_LABELS, fmtTime12, getMissedDates,
+import { todayStr, calcSleepDuration, fmtDur, fmtDateShort, DOW_LABELS, fmtTime12, getMissedDates,
 } from "./data";
 import {
   useCurrentDate, syncNotifications, clearAllScheduled, REMINDER_HOUR, REMINDER_MINUTE,
@@ -138,8 +138,8 @@ export function TrendsModule({ logs, getDailyTotals, recentDays, setSelectedDate
                   {settings.trackCalories && <>{totalCals}c | </>}₱{Math.round(totalSpent)}
                 </div>
                 <div className="flex items-end justify-center w-full h-full gap-0.5">
-                  {settings.trackCalories && <div className="w-3 bg-amber-400 rounded-t-sm" style={{ height: `${Math.max((totalCals / maxC) * 100, 3)}%` }} />}
-                  <div className="w-3 bg-rose-500 rounded-t-sm" style={{ height: `${Math.max((totalSpent / maxE) * 100, 3)}%` }} />
+                  {settings.trackCalories && <div className="w-3 bg-amber-400 rounded-t-sm transition-all duration-500 ease-out" style={{ height: `${Math.max((totalCals / maxC) * 100, 3)}%` }} />}
+                  <div className="w-3 bg-rose-500 rounded-t-sm transition-all duration-500 ease-out" style={{ height: `${Math.max((totalSpent / maxE) * 100, 3)}%` }} />
                 </div>
                 <span className="text-[10px] text-slate-400 mt-2 font-semibold">{new Date(date).toLocaleDateString("en-US", { weekday: "short" })}</span>
               </div>
@@ -196,7 +196,7 @@ export function TopExpensesModule({ logs }) {
                   <span className="text-xs font-bold text-rose-500">₱{Math.round(cost)}</span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-1.5">
-                  <div className="bg-rose-500 h-1.5 rounded-full" style={{ width: `${(cost / Math.max(top[0][1], 1)) * 100}%` }} />
+                  <div className="bg-rose-500 h-1.5 rounded-full transition-all duration-500 ease-out" style={{ width: `${(cost / Math.max(top[0][1], 1)) * 100}%` }} />
                 </div>
               </div>
             </div>
@@ -227,7 +227,7 @@ export function TopCaloriesModule({ logs }) {
                   <span className="text-xs font-bold text-amber-600">{cals} kcal</span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-1.5">
-                  <div className="bg-amber-400 h-1.5 rounded-full" style={{ width: `${(cals / Math.max(top[0][1], 1)) * 100}%` }} />
+                  <div className="bg-amber-400 h-1.5 rounded-full transition-all duration-500 ease-out" style={{ width: `${(cals / Math.max(top[0][1], 1)) * 100}%` }} />
                 </div>
               </div>
             </div>
@@ -944,7 +944,6 @@ export function GymModule({ gymData, setGymData }) {
     setGymData(prev => ({ ...prev, sessions: [...(prev.sessions || []), s] }));
     setNewSessionName(""); setShowAddSession(false);
   };
-  const deleteSession = (id) => setGymData(prev => ({ ...prev, sessions: (prev.sessions || []).filter(s => s.id !== id) }));
   const openSession = (id) => { setActiveSessionId(id); setView("session"); };
 
   if (view === "session" && activeSessionId) {
@@ -1129,7 +1128,8 @@ export function ExamModule({ exams, setShowExamModal }) {
                       <p className="text-[11px] text-slate-400 mt-0.5">{new Date(exam.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</p>
                     </div>
                     <div className="text-right">
-                      <span className={`text-2xl font-extrabold block leading-none ${txt[u]}`}>{exam.daysLeft === 0 ? "🔥" : exam.daysLeft}</span>
+                      {/* today's exam gets a soft pulse to draw the eye without being obnoxious */}
+                      <span className={`text-2xl font-extrabold block leading-none ${txt[u]} ${u === "today" ? "anim-pulse" : ""}`}>{exam.daysLeft === 0 ? "🔥" : exam.daysLeft}</span>
                       <span className={`text-[10px] font-bold uppercase tracking-wide ${txt[u]} opacity-70`}>{exam.daysLeft === 0 ? "TODAY" : exam.daysLeft === 1 ? "day left" : "days left"}</span>
                     </div>
                   </div>
@@ -1328,6 +1328,7 @@ export function PaymentsModule({ payments, setPayments, money, setMoney, logs, s
       const added = missing.map(period => ({ period, confirmed: false, confirmedOn: null }));
       return { ...p, history: [...(p.history || []), ...added].sort((a, b) => a.period.localeCompare(b.period)) };
     }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate]);
 
   const addPayment = (e) => {

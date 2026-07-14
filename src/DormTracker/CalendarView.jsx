@@ -52,7 +52,9 @@ export function CalendarView({ logs, getDailyTotals, setSelectedDate, setShowLog
           <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-400 mb-2">
             {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d => <span key={d}>{d}</span>)}
           </div>
-          <div className="grid grid-cols-7 gap-1">
+          {/* keying on year+month replays anim-fade-in whenever the user
+              navigates to a different month */}
+          <div key={`${y}-${m}`} className="grid grid-cols-7 gap-1 anim-fade-in">
             {Array.from({ length: firstDay }, (_, i) => <div key={`p${i}`} className="h-16 bg-slate-50/30 rounded-lg" />)}
             {Array.from({ length: daysInM }, (_, i) => {
               const dayNum = i + 1;

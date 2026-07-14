@@ -1,7 +1,8 @@
 {
-  "name": "dormapp",
+  "name": "my-dorm",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://cedomingo.github.io/my-dorm",
   "dependencies": {
     "@capacitor/android": "^8.4.0",
     "@capacitor/cli": "^8.4.0",
@@ -16,6 +17,7 @@
     "react-dom": "^19.2.7",
     "react-scripts": "5.0.1",
     "web-vitals": "^2.1.4"
+
   },
   "scripts": {
     "start": "react-scripts start",

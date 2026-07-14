@@ -134,34 +134,38 @@ useEffect(() => {
       </header>
 
       <main className="p-4 max-w-md mx-auto space-y-4">
-        {activeTab === "dashboard" && (
-          <Dashboard money={money} setMoney={setMoney} inventory={inventory} setInventory={setInventory}
-            logs={logs} setLogs={setLogs} getDailyTotals={getDailyTotals} recentDays={recentDays}
-            setShowMoneyModal={setShowMoneyModal} setSelectedDate={setSelectedDate} setShowLogModal={setShowLogModal}
-            exams={exams} setShowExamModal={() => setShowExamModal(true)} todos={todos} settings={settings}
-            sleepLogs={sleepLogs} setSleepLogs={setSleepLogs} sleepSettings={sleepSettings} setSleepSettings={setSleepSettings}
-            readingSubjects={readingSubjects} setReadingSubjects={setReadingSubjects} readingLogs={readingLogs} setReadingLogs={setReadingLogs}
-            medicineLogs={medicineLogs} setMedicineLogs={setMedicineLogs}
-            medicineSchedules={medicineSchedules} setMedicineSchedules={setMedicineSchedules}
-            debtRecords={debtRecords} setDebtRecords={setDebtRecords}
-            gymData={gymData} setGymData={setGymData}
-            payments={payments} setPayments={setPayments}
-            dashboardConfig={dashboardConfig} setDashboardConfig={setDashboardConfig} />
-        )}
-        {activeTab === "calendar" && (
-          <CalendarView logs={logs} getDailyTotals={getDailyTotals} setSelectedDate={setSelectedDate}
-            setShowLogModal={setShowLogModal} todos={todos}
-            onOpenTodo={date => { setTodoModalDate(date); setShowTodoModal(true); }}
-            settings={settings} sleepLogs={sleepLogs} money={money} />
-        )}
-        {activeTab === "dictionary" && (
-          <DictionaryView dictionary={dictionary}
-            onEdit={p => { setEditingPreset(p); setShowDictModal(true); }}
-            onDelete={id => setDictionary(p => p.filter(i => i.id !== id))}
-            onAdd={() => { setEditingPreset(null); setShowDictModal(true); }} />
-        )}
-        {activeTab === "tools" && <ToolsView />}
-        {activeTab === "settings" && <SettingsView settings={settings} setSettings={setSettings} />}
+        {/* keying on activeTab forces a remount, replaying the
+            .tab-content-enter fade/slide-up animation on every switch */}
+        <div key={activeTab} className="space-y-4 tab-content-enter">
+          {activeTab === "dashboard" && (
+            <Dashboard money={money} setMoney={setMoney} inventory={inventory} setInventory={setInventory}
+              logs={logs} setLogs={setLogs} getDailyTotals={getDailyTotals} recentDays={recentDays}
+              setShowMoneyModal={setShowMoneyModal} setSelectedDate={setSelectedDate} setShowLogModal={setShowLogModal}
+              exams={exams} setShowExamModal={() => setShowExamModal(true)} todos={todos} settings={settings}
+              sleepLogs={sleepLogs} setSleepLogs={setSleepLogs} sleepSettings={sleepSettings} setSleepSettings={setSleepSettings}
+              readingSubjects={readingSubjects} setReadingSubjects={setReadingSubjects} readingLogs={readingLogs} setReadingLogs={setReadingLogs}
+              medicineLogs={medicineLogs} setMedicineLogs={setMedicineLogs}
+              medicineSchedules={medicineSchedules} setMedicineSchedules={setMedicineSchedules}
+              debtRecords={debtRecords} setDebtRecords={setDebtRecords}
+              gymData={gymData} setGymData={setGymData}
+              payments={payments} setPayments={setPayments}
+              dashboardConfig={dashboardConfig} setDashboardConfig={setDashboardConfig} />
+          )}
+          {activeTab === "calendar" && (
+            <CalendarView logs={logs} getDailyTotals={getDailyTotals} setSelectedDate={setSelectedDate}
+              setShowLogModal={setShowLogModal} todos={todos}
+              onOpenTodo={date => { setTodoModalDate(date); setShowTodoModal(true); }}
+              settings={settings} sleepLogs={sleepLogs} money={money} />
+          )}
+          {activeTab === "dictionary" && (
+            <DictionaryView dictionary={dictionary}
+              onEdit={p => { setEditingPreset(p); setShowDictModal(true); }}
+              onDelete={id => setDictionary(p => p.filter(i => i.id !== id))}
+              onAdd={() => { setEditingPreset(null); setShowDictModal(true); }} />
+          )}
+          {activeTab === "tools" && <ToolsView />}
+          {activeTab === "settings" && <SettingsView settings={settings} setSettings={setSettings} />}
+        </div>
       </main>
 
       <nav className="fixed bottom-0 w-full bg-white border-t border-slate-200 z-10 max-w-md left-1/2 -translate-x-1/2">
@@ -178,5 +182,3 @@ useEffect(() => {
     </div>
   );
 }
-
-
