@@ -80,6 +80,25 @@ export const fmtDateShort = (ds) => {
   return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
 };
 
+// Merges pending todos + exams into one sorted list of { type, date, text,
+// daysLeft }. daysLeft can be NEGATIVE — that's a missed/past-due item, and
+// callers (DeadlinesModule, the widget bridge) decide how to bucket/display
+// those rather than this helper silently dropping them.
+export const getAllDeadlines = (todos, exams) => {
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const todoItems = Object.entries(todos || {}).flatMap(([date, items]) => {
+    const diff = Math.ceil((new Date(date + "T00:00:00") - now) / 86400000);
+    return (items || [])
+      .filter(t => !t.done)
+      .map(t => ({ type: "todo", date, text: t.text, daysLeft: diff }));
+  });
+  const examItems = (exams || []).map(e => {
+    const diff = Math.ceil((new Date(e.date + "T00:00:00") - now) / 86400000);
+    return { type: "exam", date: e.date, text: e.subject + (e.label ? ` — ${e.label}` : ""), daysLeft: diff };
+  });
+  return [...todoItems, ...examItems].sort((a, b) => a.daysLeft - b.daysLeft);
+};
+
 // ─────────────────────────────────────────────
 // Reading Notification Tracker helpers
 // (previously duplicated locally in modules.jsx — now the single source of truth)

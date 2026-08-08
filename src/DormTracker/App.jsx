@@ -28,6 +28,7 @@ import {
   usePaymentsNotifications, useDebtsNotifications, useDeadlinesNotifications,
   useExamNotifications, useReadingNotifications, useMedicineNotifications,
 } from "./modules";
+import { useWidgetSync } from "./widgetBridge";
 
 
 export default function App() {
@@ -95,6 +96,9 @@ useEffect(() => {
   useExamNotifications(exams, notif.exams);
   useReadingNotifications(readingSubjects, readingLogs, notif.reading);
   useMedicineNotifications(medicineSchedules, notif.medicine);
+
+  // Keeps the native "Closest Deadlines" homescreen widget in sync.
+  useWidgetSync(todos, exams);
 
   const getDailyTotals = (ds) => {
     const d = logs[ds] || {};

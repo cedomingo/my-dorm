@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_card_bg">#FFFFFF</color>
+    <color name="widget_header_text">#1E293B</color>
+    <color name="widget_empty_text">#94A3B8</color>
+
+    <color name="widget_item_bg">#F8FAFC</color>
+    <color name="widget_item_border">#F1F5F9</color>
+    <color name="widget_item_text">#334155</color>
+    <color name="widget_upcoming_text">#64748B</color>
+
+    <color name="widget_missed_bg">#FEF2F2</color>
+    <color name="widget_missed_border">#FECACA</color>
+    <color name="widget_missed_text">#DC2626</color>
+</resources>

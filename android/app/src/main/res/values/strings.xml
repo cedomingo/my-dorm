@@ -4,4 +4,10 @@
     <string name="title_activity_main">My Dorm</string>
     <string name="package_name">com.dormtracker.app</string>
     <string name="custom_url_scheme">com.dormtracker.app</string>
+
+    <!-- Closest Deadlines widget -->
+    <string name="widget_deadlines_label">Closest Deadlines</string>
+    <string name="widget_deadlines_title">Closest Deadlines</string>
+    <string name="widget_deadlines_empty">Nothing due — you\'re all caught up 🎉</string>
+    <string name="widget_deadlines_description">Shows your closest upcoming (and missed) to-dos and exams.</string>
 </resources>

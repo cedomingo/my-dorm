@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 import {
   ChevronDown, Package, Utensils, Plus, Minus, BookOpen,
   ChevronLeft, ChevronRight, X, TrendingDown,
-  Check, Trash2, Edit, GraduationCap, ListTodo, AlarmClock,
+  Check, Trash2, Edit, GraduationCap, ListTodo, AlarmClock, AlertTriangle,
   Moon, Pill, Dumbbell, DollarSign,
   ArrowDownLeft, ArrowUpRight, Pencil, Coffee, BarChart2,
   Repeat, CalendarClock, BellRing,
@@ -16,6 +16,7 @@ import {
 import { Card, CardHeader, SoftAccentBtn } from "./primitives";
 import { useLocalStorage } from "./hooks";
 import { todayStr, calcSleepDuration, fmtDur, fmtDateShort, DOW_LABELS, fmtTime12, getMissedDates,
+  getAllDeadlines,
 } from "./data";
 import {
   useCurrentDate, syncNotifications, clearAllScheduled, REMINDER_HOUR, REMINDER_MINUTE,
@@ -1175,38 +1176,59 @@ export function useExamNotifications(exams, cat) {
 
 // 4k. Closest Deadlines
 export function DeadlinesModule({ todos, exams }) {
-  const now = new Date(); now.setHours(0, 0, 0, 0);
-  const pendingTodos = Object.entries(todos).flatMap(([date, items]) => {
-    const diff = Math.ceil((new Date(date + "T00:00:00") - now) / 86400000);
-    if (diff < 0) return [];
-    return items.filter(t => !t.done).map(t => ({ type: "todo", date, text: t.text, daysLeft: diff }));
-  });
-  const upcomingExams = exams.map(e => {
-    const diff = Math.ceil((new Date(e.date + "T00:00:00") - now) / 86400000);
-    return { type: "exam", date: e.date, text: e.subject + (e.label ? ` — ${e.label}` : ""), daysLeft: diff };
-  }).filter(e => e.daysLeft >= 0);
-  const all = [...pendingTodos, ...upcomingExams].sort((a, b) => a.daysLeft - b.daysLeft);
-  if (all.length === 0) return null;
-  const min = all[0].daysLeft;
-  const closest = all.filter(i => i.daysLeft === min);
-  const upcoming = all.filter(i => i.daysLeft > min).slice(0, 3);
+  const all = getAllDeadlines(todos, exams);
+  // Missed = past-due and not done (todos) / already past (exams). Shown
+  // most-recently-missed first, since those are the ones still worth
+  // catching up on.
+  const missed = all.filter(i => i.daysLeft < 0).sort((a, b) => b.daysLeft - a.daysLeft);
+  const upcoming = all.filter(i => i.daysLeft >= 0);
+  if (missed.length === 0 && upcoming.length === 0) return null;
+
   const fmtD = d => d === 0 ? "Today" : d === 1 ? "Tomorrow" : `${d} days`;
+  const fmtOverdue = d => d === -1 ? "1 day overdue" : `${Math.abs(d)} days overdue`;
+
+  const min = upcoming.length > 0 ? upcoming[0].daysLeft : null;
+  const closest = min !== null ? upcoming.filter(i => i.daysLeft === min) : [];
+  const upNext = min !== null ? upcoming.filter(i => i.daysLeft > min).slice(0, 3) : [];
+  const missedShown = missed.slice(0, 3);
+
   return (
     <Card>
       <CardHeader icon={<AlarmClock size={20} className="text-rose-400" />} title="Closest Deadlines" />
       <div className="p-5 space-y-2">
-        <p className="text-[10px] font-bold text-rose-500 uppercase tracking-wider">Due {fmtD(min)} — {closest[0].date}</p>
-        {closest.map((item, i) => (
-          <div key={i} className={`flex items-center gap-3 p-2.5 rounded-xl border ${item.type === "exam" ? "bg-violet-50 border-violet-100" : "bg-rose-50 border-rose-100"}`}>
-            {item.type === "exam" ? <GraduationCap size={14} className="text-violet-400 shrink-0" /> : <ListTodo size={14} className="text-rose-400 shrink-0" />}
-            <span className="text-sm font-semibold text-slate-700 flex-1">{item.text}</span>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.type === "exam" ? "bg-violet-100 text-violet-700" : "bg-rose-100 text-rose-700"}`}>{item.type === "exam" ? "Exam" : "Task"}</span>
-          </div>
-        ))}
-        {upcoming.length > 0 && (
+        {missed.length > 0 && (
+          <>
+            <p className="text-[10px] font-bold text-red-600 uppercase tracking-wider flex items-center gap-1">
+              <AlertTriangle size={12} /> Missed ({missed.length})
+            </p>
+            {missedShown.map((item, i) => (
+              <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl border bg-red-50 border-red-200">
+                {item.type === "exam" ? <GraduationCap size={14} className="text-red-500 shrink-0" /> : <ListTodo size={14} className="text-red-500 shrink-0" />}
+                <span className="text-sm font-semibold text-red-800 flex-1">{item.text}</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 shrink-0">{fmtOverdue(item.daysLeft)}</span>
+              </div>
+            ))}
+            {missed.length > missedShown.length && (
+              <p className="text-[10px] text-red-400 font-semibold pl-1">+{missed.length - missedShown.length} more missed</p>
+            )}
+          </>
+        )}
+        {closest.length > 0 && (
+          <>
+            <p className={`text-[10px] font-bold text-rose-500 uppercase tracking-wider ${missed.length > 0 ? "pt-2" : ""}`}>Due {fmtD(min)} — {closest[0].date}</p>
+            {closest.map((item, i) => (
+              <div key={i} className={`flex items-center gap-3 p-2.5 rounded-xl border ${item.type === "exam" ? "bg-violet-50 border-violet-100" : "bg-rose-50 border-rose-100"}`}>
+                {item.type === "exam" ? <GraduationCap size={14} className="text-violet-400 shrink-0" /> : <ListTodo size={14} className="text-rose-400 shrink-0" />}
+                <span className="text-sm font-semibold text-slate-700 flex-1">{item.text}</span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.type === "exam" ? "bg-violet-100 text-violet-700" : "bg-rose-100 text-rose-700"}`}>{item.type === "exam" ? "Exam" : "Task"}</span>
+              </div>
+            ))}
+          </>
+        )}
+        {upNext.length > 0 && (
           <>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pt-2">Up Next</p>
-            {upcoming.map((item, i) => (
+            {upNext.map((item, i) => (
               <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl border border-slate-100 bg-slate-50">
                 {item.type === "exam" ? <GraduationCap size={14} className="text-violet-300 shrink-0" /> : <ListTodo size={14} className="text-slate-300 shrink-0" />}
                 <span className="text-sm text-slate-500 flex-1">{item.text}</span>
