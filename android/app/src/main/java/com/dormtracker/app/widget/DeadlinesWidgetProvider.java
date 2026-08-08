@@ -60,6 +60,6 @@ public class DeadlinesWidgetProvider extends AppWidgetProvider {
         views.setPendingIntentTemplate(R.id.widget_list, itemPending);
 
         appWidgetManager.updateAppWidget(appWidgetId, views);
-        appWidgetManager.notifyAppWidgetViewsChanged(appWidgetId, R.id.widget_list);
+        appWidgetManager.notifyAppWidgetViewDataChanged(new int[] { appWidgetId }, R.id.widget_list);
     }
 }

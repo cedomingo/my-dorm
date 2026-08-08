@@ -50,7 +50,7 @@ public class WidgetDataBridgePlugin extends Plugin {
 
         if (widgetIds != null && widgetIds.length > 0) {
             // Tell the ListView's RemoteViewsFactory its data changed...
-            manager.notifyAppWidgetViewsChanged(widgetIds, R.id.widget_list);
+            manager.notifyAppWidgetViewDataChanged(widgetIds, R.id.widget_list);
             // ...and re-run onUpdate so labels like "Today"/"Tomorrow" and
             // the header stay correct too.
             Intent updateIntent = new Intent(context, DeadlinesWidgetProvider.class);
